@@ -35,6 +35,7 @@ type alias Model =
     { width : Float
     , height : Float
     , numSections : Int
+    , lineWidth : Float
     , buffer : Commands
     , toDraw : Commands
     , pointer : Maybe PointerData
@@ -44,19 +45,10 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
-    let
-        width =
-            800
-
-        height =
-            800
-
-        numSections =
-            5
-    in
-    ( { width = width
-      , height = height
+    ( { width = 800
+      , height = 800
       , numSections = 5
+      , lineWidth = 4
       , buffer =
             Canvas.empty
       , toDraw = Canvas.empty
@@ -81,7 +73,7 @@ initCanvas ({ width, height } as model) =
                 |> Canvas.strokeStyle Color.black
                 |> Canvas.lineCap Canvas.RoundCap
                 |> Canvas.lineJoin Canvas.RoundJoin
-                |> Canvas.lineWidth 4
+                |> Canvas.lineWidth model.lineWidth
                 |> Canvas.fillStyle (Color.rgb 255 255 255)
                 |> Canvas.fillRect 0 0 width height
     }
@@ -121,10 +113,7 @@ type Msg
     | EndAt Point2d
     | ClearClicked
     | NumSectionsInput String
-
-
-
--- | ChangeSize
+    | LineWidthInput String
 
 
 subscriptions : Model -> Sub Msg
@@ -173,8 +162,26 @@ update msg model =
 
                 Nothing ->
                     model
+
+        LineWidthInput num ->
+            case String.toFloat num of
+                Just v ->
+                    { model | lineWidth = v }
+                        |> setLineWidth
+
+                Nothing ->
+                    model
     , Cmd.none
     )
+
+
+setLineWidth : Model -> Model
+setLineWidth ({ lineWidth, buffer } as model) =
+    { model
+        | buffer =
+            buffer
+                |> Canvas.lineWidth lineWidth
+    }
 
 
 pendingToBuffer : Model -> Model
@@ -288,6 +295,10 @@ viewControls model =
         [ Form.group []
             [ Form.label [] [ text "Number of sections (changing this will reset the drawing)" ]
             , Input.number [ Input.onInput NumSectionsInput, Input.placeholder <| String.fromInt model.numSections ]
+            ]
+        , Form.group []
+            [ Form.label [] [ text "Brush size" ]
+            , Input.number [ Input.onInput LineWidthInput, Input.placeholder <| String.fromFloat model.lineWidth ]
             ]
         , Button.button [ Button.warning, Button.onClick ClearClicked ] [ text "Clear" ]
         ]
