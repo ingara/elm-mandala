@@ -1,5 +1,8 @@
 module Main exposing (Model, Msg(..), init, main, update, view)
 
+import Bootstrap.Button as Button
+import Bootstrap.Form as Form
+import Bootstrap.Form.Input as Input
 import Browser
 import Browser.Events
 import Canvas exposing (Commands)
@@ -29,8 +32,9 @@ type alias PointerData =
 
 
 type alias Model =
-    { width : Int
-    , height : Int
+    { width : Float
+    , height : Float
+    , numSections : Int
     , buffer : Commands
     , toDraw : Commands
     , pointer : Maybe PointerData
@@ -46,25 +50,27 @@ init =
 
         height =
             800
+
+        numSections =
+            5
     in
     ( { width = width
       , height = height
+      , numSections = 5
       , buffer =
             Canvas.empty
       , toDraw = Canvas.empty
       , pointer = Nothing
-      , frames =
-            getFrames
-                { numSections =
-                    5
-                , width = width
-                , height = height
-                }
+      , frames = []
       }
-        |> initCanvas
-        |> pendingToBuffer
+        |> resetCanvas
     , Cmd.none
     )
+
+
+resetCanvas : Model -> Model
+resetCanvas =
+    setFrames >> initCanvas >> pendingToBuffer
 
 
 initCanvas : Model -> Model
@@ -77,28 +83,31 @@ initCanvas ({ width, height } as model) =
                 |> Canvas.lineJoin Canvas.RoundJoin
                 |> Canvas.lineWidth 4
                 |> Canvas.fillStyle (Color.rgb 255 255 255)
-                |> Canvas.fillRect 0 0 (toFloat width) (toFloat height)
+                |> Canvas.fillRect 0 0 width height
     }
 
 
-getFrames : { numSections : Int, width : Float, height : Float } -> List Frame2d
-getFrames { numSections, width, height } =
+setFrames : Model -> Model
+setFrames ({ numSections, width, height } as model) =
     let
         origin =
             Point2d.fromCoordinates ( width / 2, height / 2 )
+
+        frames =
+            List.range 0 (numSections - 1)
+                |> List.map
+                    (\i ->
+                        (toFloat i / toFloat numSections)
+                            * 360
+                            |> degrees
+                    )
+                |> List.map
+                    (\rotation ->
+                        Frame2d.atOrigin
+                            |> Frame2d.rotateAround origin rotation
+                    )
     in
-    List.range 0 (numSections - 1)
-        |> List.map
-            (\i ->
-                (toFloat i / toFloat numSections)
-                    * 360
-                    |> degrees
-            )
-        |> List.map
-            (\rotation ->
-                Frame2d.atOrigin
-                    |> Frame2d.rotateAround origin rotation
-            )
+    { model | frames = frames }
 
 
 
@@ -111,6 +120,7 @@ type Msg
     | MoveAt Point2d
     | EndAt Point2d
     | ClearClicked
+    | NumSectionsInput String
 
 
 
@@ -154,6 +164,15 @@ update msg model =
             model
                 |> pendingToBuffer
                 |> initCanvas
+
+        NumSectionsInput num ->
+            case String.toInt num of
+                Just v ->
+                    { model | numSections = v }
+                        |> resetCanvas
+
+                Nothing ->
+                    model
     , Cmd.none
     )
 
@@ -241,7 +260,7 @@ drawFinalPoint newPoint { point, midPoint } ({ buffer } as model) =
 
 view : Model -> Html Msg
 view model =
-    div [ class "container" ]
+    div [ class "cont" ]
         [ viewCanvas model
         , viewControls model
         ]
@@ -251,11 +270,11 @@ viewCanvas : Model -> Html Msg
 viewCanvas model =
     let
         ( width, height ) =
-            ( toFloat model.width, toFloat model.height )
+            ( floor model.width, floor model.height )
     in
     Canvas.element
-        model.width
-        model.height
+        width
+        height
         [ Mouse.onDown (.offsetPos >> Point2d.fromCoordinates >> StartAt)
         , Mouse.onMove (.offsetPos >> Point2d.fromCoordinates >> MoveAt)
         , Mouse.onUp (.offsetPos >> Point2d.fromCoordinates >> EndAt)
@@ -265,14 +284,13 @@ viewCanvas model =
 
 viewControls : Model -> Html Msg
 viewControls model =
-    div []
-        [ button [ onClick ClearClicked ] [ text "Clear" ]
+    Form.form []
+        [ Form.group []
+            [ Form.label [] [ text "Number of sections (changing this will reset the drawing)" ]
+            , Input.number [ Input.onInput NumSectionsInput, Input.placeholder <| String.fromInt model.numSections ]
+            ]
+        , Button.button [ Button.warning, Button.onClick ClearClicked ] [ text "Clear" ]
         ]
-
-
-tupleMapBoth : (a -> b -> c) -> ( a, b ) -> c
-tupleMapBoth f ( a, b ) =
-    f a b
 
 
 

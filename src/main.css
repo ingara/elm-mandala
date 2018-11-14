@@ -16,7 +16,7 @@ img {
     max-width: 200px;
 }
 
-.container {
+.cont {
     display: flex;
     flex-direction: column;
     justify-content: center;
