@@ -5,8 +5,8 @@ import Browser.Events
 import Canvas exposing (Commands)
 import CanvasColor as Color exposing (Color)
 import Frame2d exposing (Frame2d)
-import Html exposing (Html, div, h1, img, text)
-import Html.Attributes exposing (src)
+import Html exposing (..)
+import Html.Attributes exposing (..)
 import Html.Events.Extra.Mouse as Mouse
 import Html.Events.Extra.Touch as Touch
 import Point2d exposing (Point2d)
@@ -59,6 +59,8 @@ init =
       , buffer =
             Canvas.empty
                 |> Canvas.strokeStyle Color.black
+                |> Canvas.lineCap Canvas.RoundCap
+                |> Canvas.lineJoin Canvas.RoundJoin
                 |> Canvas.lineWidth 4
                 |> Canvas.fillStyle (Color.rgb 255 255 255)
                 |> Canvas.fillRect 0 0 width height
