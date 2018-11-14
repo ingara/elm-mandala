@@ -7,6 +7,7 @@ import CanvasColor as Color exposing (Color)
 import Frame2d exposing (Frame2d)
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (..)
 import Html.Events.Extra.Mouse as Mouse
 import Html.Events.Extra.Touch as Touch
 import Point2d exposing (Point2d)
@@ -15,11 +16,6 @@ import Point2d exposing (Point2d)
 color : Color
 color =
     Color.black
-
-
-numSections : Int
-numSections =
-    12
 
 
 
@@ -50,39 +46,59 @@ init =
 
         height =
             800
-
-        origin =
-            Point2d.fromCoordinates ( width / 2, height / 2 )
     in
     ( { width = width
       , height = height
       , buffer =
+            Canvas.empty
+      , toDraw = Canvas.empty
+      , pointer = Nothing
+      , frames =
+            getFrames
+                { numSections =
+                    5
+                , width = width
+                , height = height
+                }
+      }
+        |> initCanvas
+        |> pendingToBuffer
+    , Cmd.none
+    )
+
+
+initCanvas : Model -> Model
+initCanvas ({ width, height } as model) =
+    { model
+        | buffer =
             Canvas.empty
                 |> Canvas.strokeStyle Color.black
                 |> Canvas.lineCap Canvas.RoundCap
                 |> Canvas.lineJoin Canvas.RoundJoin
                 |> Canvas.lineWidth 4
                 |> Canvas.fillStyle (Color.rgb 255 255 255)
-                |> Canvas.fillRect 0 0 width height
-      , toDraw = Canvas.empty
-      , pointer = Nothing
-      , frames =
-            List.range 0 (numSections - 1)
-                |> List.map
-                    (\i ->
-                        (toFloat i / toFloat numSections)
-                            * 360
-                            |> degrees
-                    )
-                |> List.map
-                    (\rotation ->
-                        Frame2d.atOrigin
-                            |> Frame2d.rotateAround origin rotation
-                    )
-      }
-        |> pendingToBuffer
-    , Cmd.none
-    )
+                |> Canvas.fillRect 0 0 (toFloat width) (toFloat height)
+    }
+
+
+getFrames : { numSections : Int, width : Float, height : Float } -> List Frame2d
+getFrames { numSections, width, height } =
+    let
+        origin =
+            Point2d.fromCoordinates ( width / 2, height / 2 )
+    in
+    List.range 0 (numSections - 1)
+        |> List.map
+            (\i ->
+                (toFloat i / toFloat numSections)
+                    * 360
+                    |> degrees
+            )
+        |> List.map
+            (\rotation ->
+                Frame2d.atOrigin
+                    |> Frame2d.rotateAround origin rotation
+            )
 
 
 
@@ -94,6 +110,11 @@ type Msg
     | StartAt Point2d
     | MoveAt Point2d
     | EndAt Point2d
+    | ClearClicked
+
+
+
+-- | ChangeSize
 
 
 subscriptions : Model -> Sub Msg
@@ -128,6 +149,11 @@ update msg model =
 
                 Nothing ->
                     model
+
+        ClearClicked ->
+            model
+                |> pendingToBuffer
+                |> initCanvas
     , Cmd.none
     )
 
@@ -215,8 +241,9 @@ drawFinalPoint newPoint { point, midPoint } ({ buffer } as model) =
 
 view : Model -> Html Msg
 view model =
-    div []
+    div [ class "container" ]
         [ viewCanvas model
+        , viewControls model
         ]
 
 
@@ -234,6 +261,13 @@ viewCanvas model =
         , Mouse.onUp (.offsetPos >> Point2d.fromCoordinates >> EndAt)
         ]
         model.toDraw
+
+
+viewControls : Model -> Html Msg
+viewControls model =
+    div []
+        [ button [ onClick ClearClicked ] [ text "Clear" ]
+        ]
 
 
 tupleMapBoth : (a -> b -> c) -> ( a, b ) -> c
