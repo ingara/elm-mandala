@@ -6,7 +6,9 @@ import Bootstrap.Form.Input as Input
 import Browser
 import Browser.Events
 import Canvas exposing (Commands)
-import CanvasColor as Color exposing (Color)
+import CanvasColor
+import Color exposing (Color)
+import ColorPicker
 import Frame2d exposing (Frame2d)
 import Html exposing (..)
 import Html.Attributes exposing (..)
@@ -14,11 +16,6 @@ import Html.Events exposing (..)
 import Html.Events.Extra.Mouse as Mouse
 import Html.Events.Extra.Touch as Touch
 import Point2d exposing (Point2d)
-
-
-color : Color
-color =
-    Color.black
 
 
 
@@ -36,6 +33,8 @@ type alias Model =
     , height : Float
     , numSections : Int
     , lineWidth : Float
+    , brushColor : Color
+    , colorPicker : ColorPicker.State
     , buffer : Commands
     , toDraw : Commands
     , pointer : Maybe PointerData
@@ -49,6 +48,8 @@ init =
       , height = 800
       , numSections = 5
       , lineWidth = 4
+      , brushColor = Color.black
+      , colorPicker = ColorPicker.empty
       , buffer =
             Canvas.empty
       , toDraw = Canvas.empty
@@ -58,6 +59,19 @@ init =
         |> resetCanvas
     , Cmd.none
     )
+
+
+toCanvasColor : Color -> CanvasColor.Color
+toCanvasColor color =
+    let
+        { red, green, blue, alpha } =
+            Color.toRgba color
+    in
+    CanvasColor.rgba
+        (round <| 255 * red)
+        (round <| 255 * green)
+        (round <| 255 * blue)
+        alpha
 
 
 resetCanvas : Model -> Model
@@ -70,11 +84,11 @@ initCanvas ({ width, height } as model) =
     { model
         | buffer =
             Canvas.empty
-                |> Canvas.strokeStyle Color.black
+                |> Canvas.strokeStyle (toCanvasColor model.brushColor)
                 |> Canvas.lineCap Canvas.RoundCap
                 |> Canvas.lineJoin Canvas.RoundJoin
                 |> Canvas.lineWidth model.lineWidth
-                |> Canvas.fillStyle (Color.rgb 255 255 255)
+                |> Canvas.fillStyle CanvasColor.white
                 |> Canvas.fillRect 0 0 width height
     }
 
@@ -114,6 +128,7 @@ type Msg
     | ClearClicked
     | NumSectionsInput String
     | LineWidthInput String
+    | ColorPickerMsg ColorPicker.Msg
 
 
 subscriptions : Model -> Sub Msg
@@ -171,6 +186,20 @@ update msg model =
 
                 Nothing ->
                     model
+
+        ColorPickerMsg subMsg ->
+            let
+                ( colorPicker, color ) =
+                    ColorPicker.update
+                        subMsg
+                        model.brushColor
+                        model.colorPicker
+            in
+            { model
+                | colorPicker = colorPicker
+                , brushColor = Maybe.withDefault model.brushColor color
+            }
+                |> setBrushColor
     , Cmd.none
     )
 
@@ -181,6 +210,15 @@ setLineWidth ({ lineWidth, buffer } as model) =
         | buffer =
             buffer
                 |> Canvas.lineWidth lineWidth
+    }
+
+
+setBrushColor : Model -> Model
+setBrushColor ({ brushColor, buffer } as model) =
+    { model
+        | buffer =
+            buffer
+                |> Canvas.strokeStyle (toCanvasColor brushColor)
     }
 
 
@@ -292,7 +330,7 @@ viewCanvas model =
 
 viewControls : Model -> Html Msg
 viewControls model =
-    Form.form []
+    Form.formInline []
         [ Form.group []
             [ Form.label [] [ text "Number of sections" ]
             , Input.number [ Input.onInput NumSectionsInput, Input.placeholder <| String.fromInt model.numSections ]
@@ -300,6 +338,11 @@ viewControls model =
         , Form.group []
             [ Form.label [] [ text "Brush size" ]
             , Input.number [ Input.onInput LineWidthInput, Input.placeholder <| String.fromFloat model.lineWidth ]
+            ]
+        , Form.group []
+            [ Form.label [] [ text "Brush color" ]
+            , Html.map ColorPickerMsg <|
+                ColorPicker.view model.brushColor model.colorPicker
             ]
         , Button.button [ Button.warning, Button.onClick ClearClicked ] [ text "Clear" ]
         ]
