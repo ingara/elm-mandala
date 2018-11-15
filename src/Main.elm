@@ -1,4 +1,4 @@
-module Main exposing (Model, Msg(..), init, main, update, view)
+port module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Bootstrap.Button as Button
 import Bootstrap.Form as Form
@@ -17,6 +17,12 @@ import Html.Events exposing (..)
 import Html.Events.Extra.Mouse as Mouse
 import Html.Events.Extra.Touch as Touch
 import Point2d exposing (Point2d)
+
+
+port toJs : { msg : String, payload : String } -> Cmd msg
+
+
+port fromJs : ({ msg : String, payload : String } -> msg) -> Sub msg
 
 
 
@@ -45,6 +51,7 @@ type alias Model =
     , toDraw : Commands
     , pointer : Maybe PointerData
     , frames : List Frame2d
+    , history : List String
     }
 
 
@@ -66,6 +73,7 @@ init flags =
       , toDraw = Canvas.empty
       , pointer = Nothing
       , frames = []
+      , history = []
       }
         |> resetCanvas
     , Cmd.none
@@ -142,66 +150,83 @@ type Msg
     | LineWidthInput String
     | ColorPickerMsg ColorPicker.Msg
     | AllowDrawingOutsideToggle Bool
+    | JsMsg { msg : String, payload : String }
+    | HistoryElementChosen String
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Browser.Events.onAnimationFrameDelta AnimationFrame
+    Sub.batch
+        [ Browser.Events.onAnimationFrameDelta AnimationFrame
+        , fromJs JsMsg
+        ]
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( case msg of
+    case msg of
         NoOp ->
-            model
+            ( model, Cmd.none )
 
         AnimationFrame _ ->
-            model |> pendingToBuffer
+            ( model |> pendingToBuffer, Cmd.none )
 
         StartAt coords ->
-            model
+            ( model
                 |> startDrawing coords
+            , Cmd.none
+            )
 
         MoveAt coords ->
             case model.pointer of
                 Just pointer ->
-                    model
+                    ( model
                         |> drawPoint coords pointer
+                    , Cmd.none
+                    )
 
                 Nothing ->
-                    model
+                    ( model, Cmd.none )
 
         EndAt coords ->
             case model.pointer of
                 Just pointer ->
-                    model
+                    ( model
                         |> drawFinalPoint coords pointer
+                    , toJs { msg = "SAVE", payload = "" }
+                    )
 
                 Nothing ->
-                    model
+                    ( model, Cmd.none )
 
         ClearClicked ->
-            model
+            ( model
                 |> pendingToBuffer
                 |> initCanvas
+            , Cmd.none
+            )
 
         NumSectionsInput num ->
             case String.toInt num of
                 Just v ->
-                    { model | numSections = v }
+                    ( { model | numSections = v }
                         |> setFrames
+                    , Cmd.none
+                    )
 
                 Nothing ->
-                    model
+                    ( model, Cmd.none )
 
         LineWidthInput num ->
             case String.toFloat num of
                 Just v ->
-                    { model | lineWidth = v }
+                    ( { model | lineWidth = v }
                         |> setLineWidth
+                    , Cmd.none
+                    )
 
                 Nothing ->
-                    model
+                    ( model, Cmd.none )
 
         ColorPickerMsg subMsg ->
             let
@@ -211,16 +236,31 @@ update msg model =
                         model.brushColor
                         model.colorPicker
             in
-            { model
+            ( { model
                 | colorPicker = colorPicker
                 , brushColor = Maybe.withDefault model.brushColor color
-            }
+              }
                 |> setBrushColor
+            , Cmd.none
+            )
 
         AllowDrawingOutsideToggle val ->
-            { model | allowDrawingOutside = val }
-    , Cmd.none
-    )
+            ( { model | allowDrawingOutside = val }, Cmd.none )
+
+        JsMsg data ->
+            case data.msg of
+                "SAVED" ->
+                    ( { model
+                        | history = data.payload :: model.history
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        HistoryElementChosen str ->
+            ( model, toJs { msg = "LOAD", payload = str } )
 
 
 setLineWidth : Model -> Model
@@ -327,6 +367,7 @@ view model =
     div [ class "cont" ]
         [ viewCanvas model
         , viewControls model
+        , viewHistory model
         ]
 
 
@@ -339,7 +380,8 @@ viewCanvas model =
     Canvas.element
         width
         height
-        [ Mouse.onDown (.offsetPos >> Point2d.fromCoordinates >> StartAt)
+        [ id "canvas"
+        , Mouse.onDown (.offsetPos >> Point2d.fromCoordinates >> StartAt)
         , Mouse.onMove (.offsetPos >> Point2d.fromCoordinates >> MoveAt)
         , Mouse.onUp (.offsetPos >> Point2d.fromCoordinates >> EndAt)
         , Mouse.onLeave
@@ -380,7 +422,27 @@ viewControls model =
                 ]
                 "Allow drawing outside"
             ]
-        , Button.button [ Button.warning, Button.onClick ClearClicked ] [ text "Clear" ]
+        , Button.button
+            [ Button.warning
+            , Button.onClick ClearClicked
+            ]
+            [ text "Clear" ]
+        ]
+
+
+viewHistory : Model -> Html Msg
+viewHistory { history } =
+    div [ class "history" ]
+        [ h2 [] [ text "HISTORY" ]
+        , ul [ class "history" ]
+            (history
+                |> List.reverse
+                |> List.indexedMap
+                    (\i h ->
+                        li [ onClick <| HistoryElementChosen h ]
+                            [ text <| String.fromInt i ]
+                    )
+            )
         ]
 
 
