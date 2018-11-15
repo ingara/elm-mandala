@@ -2,6 +2,7 @@ module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Bootstrap.Button as Button
 import Bootstrap.Form as Form
+import Bootstrap.Form.Checkbox as Checkbox
 import Bootstrap.Form.Input as Input
 import Browser
 import Browser.Events
@@ -28,6 +29,10 @@ type alias PointerData =
     }
 
 
+type alias Flags =
+    { width : Float, height : Float }
+
+
 type alias Model =
     { width : Float
     , height : Float
@@ -35,6 +40,7 @@ type alias Model =
     , lineWidth : Float
     , brushColor : Color
     , colorPicker : ColorPicker.State
+    , allowDrawingOutside : Bool
     , buffer : Commands
     , toDraw : Commands
     , pointer : Maybe PointerData
@@ -42,14 +48,19 @@ type alias Model =
     }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( { width = 800
-      , height = 800
+init : Flags -> ( Model, Cmd Msg )
+init flags =
+    let
+        size =
+            Basics.min flags.width flags.height
+    in
+    ( { width = size
+      , height = size
       , numSections = 5
       , lineWidth = 4
       , brushColor = Color.black
       , colorPicker = ColorPicker.empty
+      , allowDrawingOutside = False
       , buffer =
             Canvas.empty
       , toDraw = Canvas.empty
@@ -121,7 +132,8 @@ setFrames ({ numSections, width, height } as model) =
 
 
 type Msg
-    = AnimationFrame Float
+    = NoOp
+    | AnimationFrame Float
     | StartAt Point2d
     | MoveAt Point2d
     | EndAt Point2d
@@ -129,6 +141,7 @@ type Msg
     | NumSectionsInput String
     | LineWidthInput String
     | ColorPickerMsg ColorPicker.Msg
+    | AllowDrawingOutsideToggle Bool
 
 
 subscriptions : Model -> Sub Msg
@@ -139,6 +152,9 @@ subscriptions _ =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     ( case msg of
+        NoOp ->
+            model
+
         AnimationFrame _ ->
             model |> pendingToBuffer
 
@@ -200,6 +216,9 @@ update msg model =
                 , brushColor = Maybe.withDefault model.brushColor color
             }
                 |> setBrushColor
+
+        AllowDrawingOutsideToggle val ->
+            { model | allowDrawingOutside = val }
     , Cmd.none
     )
 
@@ -323,7 +342,17 @@ viewCanvas model =
         [ Mouse.onDown (.offsetPos >> Point2d.fromCoordinates >> StartAt)
         , Mouse.onMove (.offsetPos >> Point2d.fromCoordinates >> MoveAt)
         , Mouse.onUp (.offsetPos >> Point2d.fromCoordinates >> EndAt)
-        , Mouse.onLeave (.offsetPos >> Point2d.fromCoordinates >> EndAt)
+        , Mouse.onLeave
+            (.offsetPos
+                >> Point2d.fromCoordinates
+                >> (\point ->
+                        if model.allowDrawingOutside then
+                            NoOp
+
+                        else
+                            EndAt point
+                   )
+            )
         ]
         model.toDraw
 
@@ -344,6 +373,13 @@ viewControls model =
             , Html.map ColorPickerMsg <|
                 ColorPicker.view model.brushColor model.colorPicker
             ]
+        , Form.group []
+            [ Checkbox.checkbox
+                [ Checkbox.checked model.allowDrawingOutside
+                , Checkbox.onCheck AllowDrawingOutsideToggle
+                ]
+                "Allow drawing outside"
+            ]
         , Button.button [ Button.warning, Button.onClick ClearClicked ] [ text "Clear" ]
         ]
 
@@ -352,11 +388,11 @@ viewControls model =
 ---- PROGRAM ----
 
 
-main : Program () Model Msg
+main : Program Flags Model Msg
 main =
     Browser.element
         { view = view
-        , init = \_ -> init
+        , init = init
         , update = update
         , subscriptions = subscriptions
         }
