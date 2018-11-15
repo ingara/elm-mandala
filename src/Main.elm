@@ -158,7 +158,7 @@ update msg model =
             case String.toInt num of
                 Just v ->
                     { model | numSections = v }
-                        |> resetCanvas
+                        |> setFrames
 
                 Nothing ->
                     model
@@ -293,7 +293,7 @@ viewControls : Model -> Html Msg
 viewControls model =
     Form.form []
         [ Form.group []
-            [ Form.label [] [ text "Number of sections (changing this will reset the drawing)" ]
+            [ Form.label [] [ text "Number of sections" ]
             , Input.number [ Input.onInput NumSectionsInput, Input.placeholder <| String.fromInt model.numSections ]
             ]
         , Form.group []
