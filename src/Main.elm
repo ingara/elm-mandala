@@ -285,6 +285,7 @@ viewCanvas model =
         [ Mouse.onDown (.offsetPos >> Point2d.fromCoordinates >> StartAt)
         , Mouse.onMove (.offsetPos >> Point2d.fromCoordinates >> MoveAt)
         , Mouse.onUp (.offsetPos >> Point2d.fromCoordinates >> EndAt)
+        , Mouse.onLeave (.offsetPos >> Point2d.fromCoordinates >> EndAt)
         ]
         model.toDraw
 
