@@ -304,20 +304,27 @@ drawPoint newPoint { point, midPoint } ({ frames, buffer } as model) =
     in
     { model
         | pointer = Just { point = newPoint, midPoint = newMidPoint }
-        , buffer =
+    }
+        |> drawInFrames { start = midPoint, control = point, end = newMidPoint }
+
+
+drawInFrames : { start : Point2d, control : Point2d, end : Point2d } -> Model -> Model
+drawInFrames { start, control, end } ({ frames, buffer } as model) =
+    { model
+        | buffer =
             frames
                 |> List.foldl
                     (\frame buff ->
                         buff
                             |> drawLine
                                 { start =
-                                    midPoint
+                                    start
                                         |> Point2d.placeIn frame
                                 , control =
-                                    point
+                                    control
                                         |> Point2d.placeIn frame
                                 , end =
-                                    newMidPoint
+                                    end
                                         |> Point2d.placeIn frame
                                 }
                     )
@@ -348,14 +355,12 @@ drawFinalPoint : Point2d -> PointerData -> Model -> Model
 drawFinalPoint newPoint { point, midPoint } ({ buffer } as model) =
     { model
         | pointer = Nothing
-        , buffer =
-            buffer
-                |> drawLine
-                    { start = midPoint
-                    , control = point
-                    , end = newPoint
-                    }
     }
+        |> drawInFrames
+            { start = midPoint
+            , control = point
+            , end = newPoint
+            }
 
 
 
